@@ -6,7 +6,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -20,7 +21,7 @@ jobs:
       - name: Install SDK packages
         run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      # Pastikan AndroidX aktif (kalau file gradle.properties belum ke-commit)
+      # Aktifkan AndroidX (aman meskipun file ini sudah ada di repo)
       - name: Ensure root gradle.properties
         run: |
           printf "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n" > gradle.properties
@@ -34,35 +35,53 @@ jobs:
           echo "---- ~/.gradle/gradle.properties ----"
           cat ~/.gradle/gradle.properties
 
-      # Suntik resources wajib (biar AAPT gak error), TANPA if dan TANPA nested heredoc
-      - name: Ensure res xml + strings exist
+      # Paksa resource WAJIB ada & tampilkan isinya
+      - name: Ensure res xml + strings exist (and show)
         run: |
+          set -euxo pipefail
           mkdir -p app/src/main/res/xml
           mkdir -p app/src/main/res/values
 
-          cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <accessibility-service
-              xmlns:android="http://schemas.android.com/apk/res/android"
-              android:description="@string/app_name"
-              android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewScrolled"
-              android:accessibilityFeedbackType="feedbackGeneric"
-              android:canRetrieveWindowContent="true"
-              android:canPerformGestures="true"
-              android:notificationTimeout="50"
-              android:packageNames="com.android.chrome"
-              android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews" />
-          EOF
+          # Buat accessibility_service_config.xml bila belum ada
+          if [ ! -f app/src/main/res/xml/accessibility_service_config.xml ]; then
+            cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
+            <?xml version="1.0" encoding="utf-8"?>
+            <accessibility-service
+                xmlns:android="http://schemas.android.com/apk/res/android"
+                android:description="@string/app_name"
+                android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewScrolled"
+                android:accessibilityFeedbackType="feedbackGeneric"
+                android:canRetrieveWindowContent="true"
+                android:canPerformGestures="true"
+                android:notificationTimeout="50"
+                android:packageNames="com.android.chrome"
+                android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews" />
+            EOF
+          fi
 
-          cat > app/src/main/res/values/strings.xml <<'EOF'
-          <resources>
-            <string name="app_name">FlagEnabler</string>
-          </resources>
-          EOF
+          # Pastikan strings.xml ada
+          if [ ! -f app/src/main/res/values/strings.xml ]; then
+            cat > app/src/main/res/values/strings.xml <<'EOF'
+            <resources>
+              <string name="app_name">FlagEnabler</string>
+            </resources>
+            EOF
+          fi
 
-          echo "---- verify ----"
+          echo "---- verify res/xml ----"
           ls -la app/src/main/res/xml
-          ls -la app/src/main/res/values
+          echo "---- cat accessibility_service_config.xml ----"
+          sed -n '1,200p' app/src/main/res/xml/accessibility_service_config.xml
+
+          echo "---- show manifest meta-data line ----"
+          sed -n '1,200p' app/src/main/AndroidManifest.xml | sed -n '/meta-data/,+3p' || true
+
+      # Bersih-bersih biar nggak ada cache sisa
+      - name: Clean build
+        run: |
+          rm -rf app/build
+          rm -rf ~/.gradle/caches/build-cache-*
+          find . -name "*.lock" -delete || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -70,7 +89,15 @@ jobs:
           gradle-version: 8.7
 
       - name: Build debug APK
-        run: gradle :app:assembleDebug
+        run: gradle :app:assembleDebug --stacktrace --info
+
+      - name: List merged resources (debug)
+        if: failure()
+        run: |
+          echo "---- merged_res ----"
+          find app/build/intermediates/merged_res -maxdepth 3 -type f 2>/dev/null || true
+          echo "---- packaged_res ----"
+          find app/build/intermediates/packaged_res -maxdepth 4 -type f 2>/dev/null || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
