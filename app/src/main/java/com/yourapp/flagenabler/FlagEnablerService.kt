@@ -5,7 +5,7 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.SystemClock
-import androidx.preference.PreferenceManager    // <— ganti ini
+import androidx.preference.PreferenceManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.*
@@ -110,7 +110,7 @@ class FlagEnablerService : AccessibilityService() {
     if (cands.isEmpty()) return null
     val ar = Rect().also { anchor.getBoundsInScreen(it) }
     return cands.minByOrNull {
-      val r = Rect().also { n -> it.getBoundsInScreen(n) }
+      val r = Rect().also { rect -> it.getBoundsInScreen(rect) }
       kotlin.math.abs(r.centerY() - ar.centerY()).toDouble()
     }
   }
@@ -169,5 +169,17 @@ class FlagEnablerService : AccessibilityService() {
         for (i in 0 until n.childCount) n.getChild(i)?.let { q.add(it) }
       } catch (_: Exception) {}
     }
+  }
+
+  // ⬇️ Tambahan ini yang hilang sebelumnya
+  private fun findAll(pred: (AccessibilityNodeInfo) -> Boolean): List<AccessibilityNodeInfo> {
+    val root = rootInActiveWindow ?: return emptyList()
+    val out = mutableListOf<AccessibilityNodeInfo>()
+    bfs(root) { n ->
+      try {
+        if (pred(n)) out.add(n)
+      } catch (_: Exception) {}
+    }
+    return out
   }
 }
