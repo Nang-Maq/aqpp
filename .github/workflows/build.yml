@@ -1,3 +1,10 @@
+    - name: Ensure gradle.properties
+      run: |
+        cat > gradle.properties <<'EOF'
+        org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+        android.useAndroidX=true
+        android.enableJetifier=true
+        EOF
 name: build-apk
 on:
   workflow_dispatch:
