@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.preference.PreferenceManager
+import androidx.preference.PreferenceManager   // <— ganti ini
 
 class TriggerReceiver : BroadcastReceiver() {
   override fun onReceive(ctx: Context, intent: Intent) {

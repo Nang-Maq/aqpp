@@ -5,7 +5,7 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.SystemClock
-import android.preference.PreferenceManager
+import androidx.preference.PreferenceManager    // <— ganti ini
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.*
