@@ -21,62 +21,66 @@ jobs:
       - name: Install SDK packages
         run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      # Aktifkan AndroidX (aman meskipun file ini sudah ada di repo)
-      - name: Ensure root gradle.properties
+      # Paksa AndroidX aktif (aman walau file sudah ada)
+      - name: Ensure gradle.properties (root)
         run: |
           printf "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n" > gradle.properties
-          echo "---- gradle.properties (root) ----"
+          echo "---- root gradle.properties ----"
           cat gradle.properties
 
-      - name: Ensure user gradle.properties
+      - name: Ensure gradle.properties (~/.gradle)
         run: |
           mkdir -p ~/.gradle
           printf "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n" > ~/.gradle/gradle.properties
           echo "---- ~/.gradle/gradle.properties ----"
           cat ~/.gradle/gradle.properties
 
-      # Paksa resource WAJIB ada & tampilkan isinya
-      - name: Ensure res xml + strings exist (and show)
+      # Buat resource yang wajib ada TANPA heredoc
+      - name: Ensure res xml + strings exist (no heredoc)
+        shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p app/src/main/res/xml
-          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/xml app/src/main/res/values
 
-          # Buat accessibility_service_config.xml bila belum ada
-          if [ ! -f app/src/main/res/xml/accessibility_service_config.xml ]; then
-            cat > app/src/main/res/xml/accessibility_service_config.xml <<'EOF'
-            <?xml version="1.0" encoding="utf-8"?>
-            <accessibility-service
-                xmlns:android="http://schemas.android.com/apk/res/android"
-                android:description="@string/app_name"
-                android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewScrolled"
-                android:accessibilityFeedbackType="feedbackGeneric"
-                android:canRetrieveWindowContent="true"
-                android:canPerformGestures="true"
-                android:notificationTimeout="50"
-                android:packageNames="com.android.chrome"
-                android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews" />
-            EOF
-          fi
+          # accessibility_service_config.xml
+          {
+            printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>'
+            printf '%s\n' '<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"'
+            printf '%s\n' '    android:description="@string/app_name"'
+            printf '%s\n' '    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewScrolled"'
+            printf '%s\n' '    android:accessibilityFeedbackType="feedbackGeneric"'
+            printf '%s\n' '    android:canRetrieveWindowContent="true"'
+            printf '%s\n' '    android:canPerformGestures="true"'
+            printf '%s\n' '    android:notificationTimeout="50"'
+            printf '%s\n' '    android:packageNames="com.android.chrome"'
+            printf '%s\n' '    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews" />'
+          } > app/src/main/res/xml/accessibility_service_config.xml
 
-          # Pastikan strings.xml ada
+          # strings.xml (kalau belum ada)
           if [ ! -f app/src/main/res/values/strings.xml ]; then
-            cat > app/src/main/res/values/strings.xml <<'EOF'
-            <resources>
-              <string name="app_name">FlagEnabler</string>
-            </resources>
-            EOF
+            {
+              printf '%s\n' '<resources>'
+              printf '%s\n' '  <string name="app_name">FlagEnabler</string>'
+              printf '%s\n' '</resources>'
+            } > app/src/main/res/values/strings.xml
           fi
 
-          echo "---- verify res/xml ----"
-          ls -la app/src/main/res/xml
-          echo "---- cat accessibility_service_config.xml ----"
+          echo '--- list res ---'
+          find app/src/main/res -maxdepth 3 -type f | sort
+          echo '--- show xml ---'
           sed -n '1,200p' app/src/main/res/xml/accessibility_service_config.xml
 
-          echo "---- show manifest meta-data line ----"
-          sed -n '1,200p' app/src/main/AndroidManifest.xml | sed -n '/meta-data/,+3p' || true
+      # Sanity check: manifest merefer @xml/accessibility_service_config
+      - name: Check manifest reference
+        run: |
+          set -e
+          if ! grep -q '@xml/accessibility_service_config' app/src/main/AndroidManifest.xml; then
+            echo "Manifest missing meta-data resource @xml/accessibility_service_config"
+            sed -n '1,220p' app/src/main/AndroidManifest.xml
+            exit 1
+          fi
+          echo "Manifest references @xml/accessibility_service_config ✅"
 
-      # Bersih-bersih biar nggak ada cache sisa
       - name: Clean build
         run: |
           rm -rf app/build
@@ -91,13 +95,13 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace --info
 
-      - name: List merged resources (debug)
+      - name: List merged resources (if failed)
         if: failure()
         run: |
           echo "---- merged_res ----"
-          find app/build/intermediates/merged_res -maxdepth 3 -type f 2>/dev/null || true
+          find app/build/intermediates/merged_res -maxdepth 5 -type f 2>/dev/null || true
           echo "---- packaged_res ----"
-          find app/build/intermediates/packaged_res -maxdepth 4 -type f 2>/dev/null || true
+          find app/build/intermediates/packaged_res -maxdepth 6 -type f 2>/dev/null || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
