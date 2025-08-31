@@ -22,6 +22,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
+              - name: Ensure root gradle.properties
+      run: |
+        pwd
+        ls -la
+        cat > gradle.properties <<'EOF'
+        org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+        android.useAndroidX=true
+        android.enableJetifier=true
+        EOF
+        echo "---- gradle.properties (root) ----"
+        cat gradle.properties
+
+    - name: Ensure user gradle.properties
+      run: |
+        mkdir -p ~/.gradle
+        cat > ~/.gradle/gradle.properties <<'EOF'
+        org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
+        android.useAndroidX=true
+        android.enableJetifier=true
+        EOF
+        echo "---- ~/.gradle/gradle.properties ----"
+        cat ~/.gradle/gradle.properties
+
       - run: gradle :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
